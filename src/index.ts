@@ -10,9 +10,11 @@ import {
   IDLE_TIMEOUT,
   MAX_MESSAGES_PER_PROMPT,
   POLL_INTERVAL,
+  TELEGRAM_BOT_POOL,
   TIMEZONE,
 } from './config.js';
 import { startCredentialProxy } from './credential-proxy.js';
+import { initBotPool } from './channels/telegram.js';
 import './channels/index.js';
 import {
   getChannelFactory,
@@ -256,6 +258,18 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   };
 
   await channel.setTyping?.(chatJid, true);
+  let typingInterval: ReturnType<typeof setInterval> | null = channel.setTyping
+    ? setInterval(() => channel.setTyping!(chatJid, true), 4000)
+    : null;
+
+  const stopTyping = () => {
+    if (typingInterval) {
+      clearInterval(typingInterval);
+      typingInterval = null;
+    }
+    channel.setTyping?.(chatJid, false);
+  };
+
   let hadError = false;
   let outputSentToUser = false;
 
@@ -270,6 +284,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
       if (text) {
+        stopTyping();
         await channel.sendMessage(chatJid, text);
         outputSentToUser = true;
       }
@@ -286,6 +301,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     }
   });
 
+  stopTyping();
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
 
@@ -669,6 +685,10 @@ async function main(): Promise<void> {
   if (channels.length === 0) {
     logger.fatal('No channels connected');
     process.exit(1);
+  }
+
+  if (TELEGRAM_BOT_POOL.length > 0) {
+    await initBotPool(TELEGRAM_BOT_POOL);
   }
 
   // Start subsystems (independently of connection handler)
