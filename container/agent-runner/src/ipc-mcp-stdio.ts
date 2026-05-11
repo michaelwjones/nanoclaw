@@ -40,6 +40,48 @@ const server = new McpServer({
 });
 
 server.tool(
+  'send_file',
+  "Send a file (PDF, image, document, etc.) to the user in the current chat. The file must be saved in the container workspace first (e.g., /workspace/group/report.pdf).",
+  {
+    file_path: z
+      .string()
+      .describe(
+        'Absolute path to the file inside the container, must be under /workspace/group/ (e.g., /workspace/group/report.pdf)',
+      ),
+    caption: z
+      .string()
+      .optional()
+      .describe('Optional caption to accompany the file'),
+  },
+  async (args) => {
+    if (!args.file_path.startsWith('/workspace/group/')) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: 'file_path must be under /workspace/group/',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const data: Record<string, string | undefined> = {
+      type: 'file',
+      chatJid,
+      filePath: args.file_path,
+      caption: args.caption,
+      groupFolder,
+      timestamp: new Date().toISOString(),
+    };
+
+    writeIpcFile(MESSAGES_DIR, data);
+
+    return { content: [{ type: 'text' as const, text: 'File send requested.' }] };
+  },
+);
+
+server.tool(
   'send_message',
   "Send a message to the user or group immediately while you're still running. Use this for progress updates or to send multiple messages. You can call this multiple times.",
   {

@@ -186,9 +186,18 @@ function buildVolumeMounts(
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
-  fs.mkdirSync(path.join(groupIpcDir, 'messages'), { recursive: true, mode: 0o777 });
-  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), { recursive: true, mode: 0o777 });
-  fs.mkdirSync(path.join(groupIpcDir, 'input'), { recursive: true, mode: 0o777 });
+  fs.mkdirSync(path.join(groupIpcDir, 'messages'), {
+    recursive: true,
+    mode: 0o777,
+  });
+  fs.mkdirSync(path.join(groupIpcDir, 'tasks'), {
+    recursive: true,
+    mode: 0o777,
+  });
+  fs.mkdirSync(path.join(groupIpcDir, 'input'), {
+    recursive: true,
+    mode: 0o777,
+  });
   mounts.push({
     hostPath: groupIpcDir,
     containerPath: '/workspace/ipc',
@@ -211,13 +220,16 @@ function buildVolumeMounts(
     'agent-runner-src',
   );
   if (fs.existsSync(agentRunnerSrc)) {
-    const srcIndex = path.join(agentRunnerSrc, 'index.ts');
+    const srcFiles = fs.readdirSync(agentRunnerSrc).filter((f) => f.endsWith('.ts'));
+    const latestSrcMtime = srcFiles.reduce((max, f) => {
+      const mtime = fs.statSync(path.join(agentRunnerSrc, f)).mtimeMs;
+      return mtime > max ? mtime : max;
+    }, 0);
     const cachedIndex = path.join(groupAgentRunnerDir, 'index.ts');
     const needsCopy =
       !fs.existsSync(groupAgentRunnerDir) ||
       !fs.existsSync(cachedIndex) ||
-      (fs.existsSync(srcIndex) &&
-        fs.statSync(srcIndex).mtimeMs > fs.statSync(cachedIndex).mtimeMs);
+      latestSrcMtime > fs.statSync(cachedIndex).mtimeMs;
     if (needsCopy) {
       fs.cpSync(agentRunnerSrc, groupAgentRunnerDir, { recursive: true });
     }
